@@ -5,6 +5,7 @@ import {
   onAuthStateChanged, 
   signInWithPopup, 
   signInWithRedirect,
+  getRedirectResult,
   signOut as firebaseSignOut 
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -17,6 +18,7 @@ const AuthContext = createContext({
   authError: null,
   clearAuthError: () => {},
   signInWithGoogle: async () => {},
+  signInWithGoogleRedirect: async () => {},
   signInAsDemoUser: (role) => {},
   signOut: async () => {}
 });
@@ -45,6 +47,15 @@ export function AuthProvider({ children }) {
         setLoading(false);
       } catch (e) {}
     }
+
+    // Listen for redirect login result if user returns from Google
+    getRedirectResult(auth).then((result) => {
+      if (result && result.user) {
+        console.log('Redirect Sign-In successful for:', result.user.email);
+      }
+    }).catch((err) => {
+      console.warn('Redirect result notice:', err.code, err.message);
+    });
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
@@ -101,8 +112,19 @@ export function AuthProvider({ children }) {
       const result = await signInWithPopup(auth, googleProvider);
       return result.user;
     } catch (error) {
-      console.error('Google Sign-In Error:', error.code, error.message);
+      console.warn('Google Sign-In Error:', error.code, error.message);
       
+      // Auto-fallback to redirect if popup is blocked
+      if (error.code === 'auth/popup-blocked') {
+        try {
+          console.log('Popup blocked by browser. Automatically redirecting to Google OAuth...');
+          await signInWithRedirect(auth, googleProvider);
+          return null;
+        } catch (redirectError) {
+          console.error('Redirect fallback error:', redirectError);
+        }
+      }
+
       let friendlyMessage = 'Google Sign-In সম্পন্ন করা যায়নি।';
       let errorType = 'general';
 
@@ -114,7 +136,7 @@ export function AuthProvider({ children }) {
         friendlyMessage = 'Firebase Console -> Authentication -> Sign-in method-এ Google প্রদানকারীকে সক্রিয় (Enable) করতে হবে।';
       } else if (error.code === 'auth/popup-blocked') {
         errorType = 'popup-blocked';
-        friendlyMessage = 'ব্রাউজারে পপআপ ব্লক করা আছে। ব্রাউজার সেটিংসে পপআপ অনুমোদন দিন।';
+        friendlyMessage = 'ব্রাউজারে পপআপ ব্লক রয়েছে। নিচের "Google রিডাইরেক্ট সাইন-ইন" বাটনে ক্লিক করুন (এতে কোনো পপআপ অনুমোদন লাগে না)।';
       } else if (error.code === 'auth/popup-closed-by-user') {
         friendlyMessage = 'লগইন উইন্ডোটি বন্ধ করে দেওয়া হয়েছে। আবার চেষ্টা করুন।';
       }
@@ -126,6 +148,23 @@ export function AuthProvider({ children }) {
         original: error.message
       };
 
+      setAuthError(errPayload);
+      throw errPayload;
+    }
+  };
+
+  const signInWithGoogleRedirect = async () => {
+    setAuthError(null);
+    try {
+      await signInWithRedirect(auth, googleProvider);
+    } catch (error) {
+      console.error('Google Redirect Error:', error.code, error.message);
+      const errPayload = {
+        code: error.code,
+        message: 'Google Redirect সম্পন্ন করা যায়নি: ' + error.message,
+        type: 'general',
+        original: error.message
+      };
       setAuthError(errPayload);
       throw errPayload;
     }
@@ -171,6 +210,7 @@ export function AuthProvider({ children }) {
       authError, 
       clearAuthError,
       signInWithGoogle, 
+      signInWithGoogleRedirect,
       signInAsDemoUser, 
       signOut 
     }}>
