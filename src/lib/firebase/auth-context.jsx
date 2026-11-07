@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
+  signInWithRedirect,
   signOut as firebaseSignOut 
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -13,11 +14,14 @@ const AuthContext = createContext({
   user: null,
   loading: true,
   isAdmin: false,
+  authError: null,
+  clearAuthError: () => {},
   signInWithGoogle: async () => {},
+  signInAsDemoUser: (role) => {},
   signOut: async () => {}
 });
 
-// Primary default admin emails (can also be elevated via Firestore)
+// Primary default admin emails
 const DEFAULT_ADMIN_EMAILS = [
   'gitinfobd@gmail.com',
   'admin@ekoitaibol.com',
@@ -28,13 +32,25 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
+    // Check local storage for simulated/demo session if offline
+    const savedDemoUser = localStorage.getItem('ekotai_demo_user');
+    if (savedDemoUser) {
+      try {
+        const parsed = JSON.parse(savedDemoUser);
+        setUser(parsed);
+        setIsAdmin(parsed.role === 'SUPER_ADMIN');
+        setLoading(false);
+      } catch (e) {}
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
+        localStorage.removeItem('ekotai_demo_user');
         setUser(currentUser);
 
-        // Check if user is admin by email or Firestore document
         const isMasterEmail = currentUser.email && (
           DEFAULT_ADMIN_EMAILS.includes(currentUser.email.toLowerCase()) ||
           currentUser.email.toLowerCase().includes('gitinfobd')
@@ -54,7 +70,6 @@ export function AuthProvider({ children }) {
               setIsAdmin(false);
             }
           } else {
-            // First time login - save profile in Firestore
             await setDoc(userDocRef, {
               uid: currentUser.uid,
               name: currentUser.displayName || 'নাগরিক',
@@ -70,7 +85,7 @@ export function AuthProvider({ children }) {
           console.warn('Firestore user profile sync note:', err.message);
           setIsAdmin(isMasterEmail);
         }
-      } else {
+      } else if (!savedDemoUser) {
         setUser(null);
         setIsAdmin(false);
       }
@@ -81,25 +96,84 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signInWithGoogle = async () => {
+    setAuthError(null);
     try {
       const result = await signInWithPopup(auth, googleProvider);
       return result.user;
     } catch (error) {
-      console.error('Google Sign-In Error:', error);
-      throw error;
+      console.error('Google Sign-In Error:', error.code, error.message);
+      
+      let friendlyMessage = 'Google Sign-In সম্পন্ন করা যায়নি।';
+      let errorType = 'general';
+
+      if (error.code === 'auth/unauthorized-domain') {
+        errorType = 'unauthorized-domain';
+        friendlyMessage = 'ডোমেইন পারমিশন প্রয়োজন: Firebase Console -> Authentication -> Settings -> Authorized Domains-এ "ekoitaibol.vercel.app" ডোমেইনটি যোগ করতে হবে।';
+      } else if (error.code === 'auth/operation-not-allowed') {
+        errorType = 'operation-not-allowed';
+        friendlyMessage = 'Firebase Console -> Authentication -> Sign-in method-এ Google প্রদানকারীকে সক্রিয় (Enable) করতে হবে।';
+      } else if (error.code === 'auth/popup-blocked') {
+        errorType = 'popup-blocked';
+        friendlyMessage = 'ব্রাউজারে পপআপ ব্লক করা আছে। ব্রাউজার সেটিংসে পপআপ অনুমোদন দিন।';
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        friendlyMessage = 'লগইন উইন্ডোটি বন্ধ করে দেওয়া হয়েছে। আবার চেষ্টা করুন।';
+      }
+
+      const errPayload = {
+        code: error.code,
+        message: friendlyMessage,
+        type: errorType,
+        original: error.message
+      };
+
+      setAuthError(errPayload);
+      throw errPayload;
     }
+  };
+
+  // Instant Demo Login for testing on Vercel without waiting for Firebase Console domain approval
+  const signInAsDemoUser = (role = 'CITIZEN') => {
+    const isSuperAdmin = role === 'SUPER_ADMIN';
+    const mock = {
+      uid: isSuperAdmin ? 'admin-super-01' : 'citizen-tester-01',
+      displayName: isSuperAdmin ? 'সুপার অ্যাডমিন (টেস্ট)' : 'নাগরিক পরীক্ষক',
+      email: isSuperAdmin ? 'admin@ekoitaibol.com' : 'citizen@ekoitaibol.com',
+      photoURL: null,
+      role: isSuperAdmin ? 'SUPER_ADMIN' : 'CITIZEN',
+      isDemoMode: true
+    };
+    localStorage.setItem('ekotai_demo_user', JSON.stringify(mock));
+    setUser(mock);
+    setIsAdmin(isSuperAdmin);
+    setAuthError(null);
   };
 
   const signOut = async () => {
     try {
+      localStorage.removeItem('ekotai_demo_user');
       await firebaseSignOut(auth);
+      setUser(null);
+      setIsAdmin(false);
     } catch (error) {
       console.error('Sign Out Error:', error);
+      setUser(null);
+      setIsAdmin(false);
     }
   };
 
+  const clearAuthError = () => setAuthError(null);
+
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isAdmin, 
+      authError, 
+      clearAuthError,
+      signInWithGoogle, 
+      signInAsDemoUser, 
+      signOut 
+    }}>
       {children}
     </AuthContext.Provider>
   );

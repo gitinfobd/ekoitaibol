@@ -4,11 +4,13 @@ import { useState } from 'react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { useAuth } from '@/lib/firebase/auth-context';
-import { Lightbulb, Sparkles, ShieldCheck, CheckCircle2, Lock, Bot, LogIn } from 'lucide-react';
+import { Lightbulb, Sparkles, ShieldCheck, CheckCircle2, Lock, Bot, LogIn, UserCheck } from 'lucide-react';
 import { divisions, districts, categories } from '@/lib/data/districts';
+import LoginModal from '@/components/LoginModal';
 
 export default function SubmitIdeaPage() {
-  const { user, signInWithGoogle } = useAuth();
+  const { user, signInWithGoogle, signInAsDemoUser } = useAuth();
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     phone: '',
     divisionId: 'rangpur',
@@ -57,12 +59,8 @@ export default function SubmitIdeaPage() {
     setSubmitError(null);
 
     if (!user) {
-      try {
-        await signInWithGoogle();
-      } catch (err) {
-        alert('আইডিয়া জমা দিতে অনুগ্রহ করে প্রথমে Google দিয়ে সাইন-ইন করুন।');
-        return;
-      }
+      setLoginModalOpen(true);
+      return;
     }
 
     if (!formData.title.trim() || !formData.problem.trim() || !formData.solution.trim()) {
@@ -172,21 +170,45 @@ export default function SubmitIdeaPage() {
             </div>
           )}
 
-          {/* User Sign-In Notice if not logged in */}
-          {!user && (
-            <div className="p-5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          {/* User Sign-In Notice */}
+          {!user ? (
+            <div className="p-5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="text-xs text-emerald-900 dark:text-emerald-200">
                 <p className="font-bold text-sm">Google দিয়ে সাইন-ইন আবশ্যক:</p>
                 <p>আইডিয়া জমা দিতে এবং আপনার আইডিয়ার অগ্রগতি ট্র্যাক করতে গুগল দিয়ে সাইন ইন করুন।</p>
               </div>
-              <button
-                type="button"
-                onClick={signInWithGoogle}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5 flex-shrink-0 shadow-sm"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Google দিয়ে লগইন করুন</span>
-              </button>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setLoginModalOpen(true)}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>Google দিয়ে লগইন</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => signInAsDemoUser('CITIZEN')}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-50 transition-colors"
+                >
+                  ইনস্ট্যান্ট টেস্ট সাইন-ইন
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <div className="flex items-center gap-2.5 text-xs text-slate-700 dark:text-slate-300">
+                <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 flex items-center justify-center font-bold">
+                  ✓
+                </div>
+                <div>
+                  <span className="font-bold text-slate-900 dark:text-white">{user.displayName || 'নাগরিক'}</span>
+                  <span className="text-slate-500 ml-1.5">({user.email || 'সাইন-ইন সক্রিয়'})</span>
+                </div>
+              </div>
+              <span className="text-[11px] px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-300/50">
+                যাচাইকৃত প্রস্তাবক
+              </span>
             </div>
           )}
 
@@ -433,6 +455,9 @@ export default function SubmitIdeaPage() {
           </div>
         </form>
       )}
+
+      {/* Login Modal */}
+      <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
     </div>
   );
 }

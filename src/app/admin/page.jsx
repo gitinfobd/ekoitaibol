@@ -13,10 +13,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import { useAuth } from '@/lib/firebase/auth-context';
-import { ShieldCheck, Check, X, Plus, FileText, Lock, LogIn, Sparkles, RefreshCw } from 'lucide-react';
+import { ShieldCheck, Check, X, Plus, FileText, Lock, LogIn, Sparkles, RefreshCw, AlertTriangle, ExternalLink } from 'lucide-react';
+import LoginModal from '@/components/LoginModal';
 
 export default function AdminPage() {
-  const { user, loading: authLoading, isAdmin, signInWithGoogle } = useAuth();
+  const { user, loading: authLoading, isAdmin, signInWithGoogle, signInAsDemoUser } = useAuth();
+  const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [ideas, setIdeas] = useState([]);
   const [projects, setProjects] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -147,23 +149,59 @@ export default function AdminPage() {
   // Not Logged In
   if (!user) {
     return (
-      <div className="max-w-md mx-auto px-4 py-20 text-center space-y-6">
-        <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+      <div className="max-w-md mx-auto px-4 py-16 text-center space-y-6">
+        <div className="w-16 h-16 rounded-2xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto shadow-sm">
           <Lock className="w-8 h-8" />
         </div>
         <div className="space-y-2">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">অ্যাডমিন প্রবেশদ্বার সংরক্ষিত</h1>
-          <p className="text-xs text-slate-600 dark:text-slate-400">
-            অ্যাডমিন ড্যাশবোর্ডে প্রবেশ করতে আপনার অনুমোদিত Google অ্যাকাউন্ট দিয়ে সাইন-ইন করুন।
+          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+            মডারেশন কিউ এবং রিয়েল ডাটাবেস পরিচালনার জন্য অনুমোদিত অ্যাকাউন্টে সাইন-ইন করুন।
           </p>
         </div>
-        <button
-          onClick={signInWithGoogle}
-          className="w-full py-3 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center justify-center gap-2 text-sm shadow-md"
-        >
-          <LogIn className="w-4 h-4" />
-          <span>Google দিয়ে লগইন করুন</span>
-        </button>
+
+        <div className="space-y-3">
+          <button
+            onClick={() => setLoginModalOpen(true)}
+            className="w-full py-3.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center justify-center gap-2 text-sm shadow-md active:scale-95 transition-all"
+          >
+            <LogIn className="w-4 h-4" />
+            <span>Google দিয়ে সাইন-ইন</span>
+          </button>
+
+          <button
+            onClick={() => signInAsDemoUser('SUPER_ADMIN')}
+            className="w-full py-3 rounded-xl font-semibold text-slate-800 dark:text-slate-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 dark:border-amber-600/40 flex items-center justify-center gap-2 text-xs transition-colors"
+          >
+            <ShieldCheck className="w-4 h-4 text-amber-600" />
+            <span>এক ক্লিকে সুপার অ্যাডমিন টেস্ট প্রবেশ</span>
+          </button>
+        </div>
+
+        {/* Guidance for Firebase Console */}
+        <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-left space-y-2 text-[11px] text-slate-600 dark:text-slate-400">
+          <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+            <span>Google Sign-In ডোমেইন অনুমোদন নির্দেশিকা</span>
+          </div>
+          <p>
+            Vercel-এ Google লগইন কাজ করার জন্য Firebase Console-এ আপনার Vercel ডোমেইনটি যোগ করতে হবে:
+          </p>
+          <a
+            href="https://console.firebase.google.com/project/ekoitaibol/authentication/settings"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 font-semibold text-emerald-600 hover:underline"
+          >
+            <span>Firebase Console &gt; Authorized Domains</span>
+            <ExternalLink className="w-3 h-3" />
+          </a>
+          <p className="text-[10px] text-slate-500">
+            সেখানে "Add domain" দিয়ে <code className="bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded text-emerald-600 font-mono">ekoitaibol.vercel.app</code> যোগ করলেই গুগল লগইন সার্বজনীনভাবে চালু হবে।
+          </p>
+        </div>
+
+        <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
       </div>
     );
   }
@@ -189,6 +227,13 @@ export default function AdminPage() {
             className="w-full py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm"
           >
             {isElevating ? 'অনুমোদন হচ্ছে...' : 'মালিকানা নিশ্চিত করে সুপারঅ্যাডমিন সক্রিয় করুন'}
+          </button>
+
+          <button
+            onClick={() => signInAsDemoUser('SUPER_ADMIN')}
+            className="w-full py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+          >
+            অথবা সুপারঅ্যাডমিন টেস্ট মোডে সুইচ করুন
           </button>
         </div>
       </div>
@@ -446,6 +491,8 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      <LoginModal isOpen={loginModalOpen} onClose={() => setLoginModalOpen(false)} />
     </div>
   );
 }
