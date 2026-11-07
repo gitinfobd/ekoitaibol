@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Lightbulb, Users, HandCoins, ShieldCheck, Menu, X, Sun, Moon, LogIn, CheckCircle2 } from 'lucide-react';
+import { Lightbulb, HandCoins, Menu, X, Sun, Moon, LogIn, ShieldAlert, LogOut, User } from 'lucide-react';
+import { useAuth } from '@/lib/firebase/auth-context';
 
 export default function Navbar() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [user, setUser] = useState(null);
+  const { user, loading, isAdmin, signInWithGoogle, signOut } = useAuth();
 
   useEffect(() => {
     const isDark = localStorage.getItem('theme') === 'dark' ||
@@ -18,16 +19,6 @@ export default function Navbar() {
     } else {
       document.documentElement.classList.remove('dark');
       setDarkMode(false);
-    }
-    
-    // Check saved simulated user session
-    const savedUser = localStorage.getItem('ekotai_user');
-    if (savedUser) {
-      try {
-        setUser(JSON.parse(savedUser));
-      } catch (e) {
-        localStorage.removeItem('ekotai_user');
-      }
     }
   }, []);
 
@@ -43,20 +34,11 @@ export default function Navbar() {
     }
   };
 
-  const handleGoogleSignIn = () => {
-    if (user) {
-      localStorage.removeItem('ekotai_user');
-      setUser(null);
-    } else {
-      // One-click simulated Google OAuth sign in
-      const mockUser = {
-        name: 'রাফিদুল হাসান',
-        email: 'rafid@example.com',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=100&q=80',
-        district: 'রংপুর'
-      };
-      localStorage.setItem('ekotai_user', JSON.stringify(mockUser));
-      setUser(mockUser);
+  const handleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      alert('Google Sign-In ব্যর্থ হয়েছে। আবার চেষ্টা করুন।');
     }
   };
 
@@ -95,7 +77,7 @@ export default function Navbar() {
               className="px-3 py-2 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-1"
             >
               <HandCoins className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>চলমান প্রকল্প ও তহবিল</span>
+              <span>প্রকল্প ও তহবিল</span>
             </Link>
             <Link
               href="/welfare"
@@ -109,6 +91,16 @@ export default function Navbar() {
             >
               আমাদের লক্ষ্য
             </Link>
+
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className="px-3 py-1.5 rounded-lg text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 border border-amber-300/60 dark:border-amber-700/60 flex items-center gap-1"
+              >
+                <ShieldAlert className="w-3.5 h-3.5" />
+                <span>অ্যাডমিন পোর্টাল</span>
+              </Link>
+            )}
           </nav>
 
           {/* Right Action buttons */}
@@ -129,22 +121,40 @@ export default function Navbar() {
               <span>আইডিয়া দিন (ফ্রি)</span>
             </Link>
 
-            {user ? (
+            {loading ? (
+              <div className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-700 animate-pulse" />
+            ) : user ? (
               <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-                <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold ring-2 ring-emerald-500/30">
-                  {user.name ? user.name.slice(0, 1) : 'U'}
+                {user.photoURL ? (
+                  <img
+                    src={user.photoURL}
+                    alt={user.displayName || 'User'}
+                    className="w-8 h-8 rounded-full ring-2 ring-emerald-500/30 object-cover"
+                  />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold ring-2 ring-emerald-500/30">
+                    {user.displayName ? user.displayName.slice(0, 1) : 'U'}
+                  </div>
+                )}
+                <div className="hidden lg:block text-left text-xs leading-tight">
+                  <p className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[100px]">
+                    {user.displayName || 'নাগরিক'}
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    {isAdmin ? 'অ্যাডমিন' : 'লগইন আছেন'}
+                  </p>
                 </div>
                 <button
-                  onClick={handleGoogleSignIn}
-                  className="text-xs text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
+                  onClick={signOut}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   title="লগআউট"
                 >
-                  লগআউট
+                  <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
               <button
-                onClick={handleGoogleSignIn}
+                onClick={handleSignIn}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               >
                 <LogIn className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -188,7 +198,7 @@ export default function Navbar() {
             onClick={() => setMobileMenuOpen(false)}
             className="block px-3 py-2 rounded-md text-base font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
-            চলমান প্রকল্প ও তহবিল
+            প্রকল্প ও তহবিল
           </Link>
           <Link
             href="/welfare"
@@ -204,6 +214,15 @@ export default function Navbar() {
           >
             আমাদের লক্ষ্য
           </Link>
+          {isAdmin && (
+            <Link
+              href="/admin"
+              onClick={() => setMobileMenuOpen(false)}
+              className="block px-3 py-2 rounded-md text-base font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40"
+            >
+              🛡️ অ্যাডমিন পোর্টাল
+            </Link>
+          )}
           <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-2">
             <Link
               href="/submit-idea"
@@ -212,15 +231,27 @@ export default function Navbar() {
             >
               আইডিয়া দিন (ফ্রি)
             </Link>
-            <button
-              onClick={() => {
-                handleGoogleSignIn();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full text-center py-2 rounded-lg text-sm font-medium border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200"
-            >
-              {user ? 'লগআউট' : 'Google সাইন-ইন'}
-            </button>
+            {user ? (
+              <button
+                onClick={() => {
+                  signOut();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-center py-2 rounded-lg text-sm font-medium border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400"
+              >
+                লগআউট ({user.displayName || 'নাগরিক'})
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  handleSignIn();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full text-center py-2 rounded-lg text-sm font-medium border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200"
+              >
+                Google সাইন-ইন
+              </button>
+            )}
           </div>
         </div>
       )}

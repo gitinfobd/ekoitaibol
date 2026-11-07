@@ -1,11 +1,43 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Lightbulb, Users, HandCoins, ShieldCheck, ArrowRight, Star, MapPin, Sparkles, CheckCircle2, ChevronRight, TrendingUp } from 'lucide-react';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { Lightbulb, HandCoins, ArrowRight, Star, MapPin, Sparkles, ChevronRight, ShieldCheck } from 'lucide-react';
 import { initialIdeas } from '@/lib/data/mock-ideas';
-import { initialProjects, liveLedger } from '@/lib/data/mock-projects';
+import { initialProjects } from '@/lib/data/mock-projects';
 
 export default function HomePage() {
-  const featuredIdea = initialIdeas[0];
-  const featuredProject = initialProjects[0];
+  const [realIdeasCount, setRealIdeasCount] = useState(0);
+  const [featuredIdea, setFeaturedIdea] = useState(null);
+  const [realProjects, setRealProjects] = useState([]);
+
+  useEffect(() => {
+    const fetchHomeData = async () => {
+      try {
+        const q = query(collection(db, 'ideas'), where('isPublic', '==', true));
+        const snapshot = await getDocs(q);
+        setRealIdeasCount(snapshot.size);
+        if (snapshot.size > 0) {
+          const first = snapshot.docs[0];
+          setFeaturedIdea({ id: first.id, ...first.data() });
+        } else {
+          setFeaturedIdea(initialIdeas[0]);
+        }
+
+        const projSnap = await getDocs(collection(db, 'projects'));
+        const projs = projSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+        setRealProjects(projs.length > 0 ? projs : initialProjects);
+      } catch (err) {
+        setFeaturedIdea(initialIdeas[0]);
+        setRealProjects(initialProjects);
+      }
+    };
+    fetchHomeData();
+  }, []);
+
+  const activeProject = realProjects[0] || initialProjects[0];
 
   return (
     <div className="space-y-16 pb-20">
@@ -14,13 +46,11 @@ export default function HomePage() {
         <div className="absolute inset-0 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:20px_20px] opacity-[0.12] pointer-events-none" />
         
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-          {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-emerald-100/80 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/60 shadow-sm animate-fade-in">
             <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>বাংলাদেশের ৬৪ জেলার মানুষের সম্মিলিত উদ্ভাবন মঞ্চ</span>
           </div>
 
-          {/* Heading */}
           <div className="max-w-4xl mx-auto space-y-4">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-[1.18]">
               একতাই শক্তি, <br className="hidden sm:inline" />
@@ -29,11 +59,10 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="text-base sm:text-lg lg:text-xl text-slate-600 dark:text-slate-300 max-w-2xl mx-auto leading-relaxed">
-              আপনার এলাকার সমস্যা সমাধানের বুদ্ধি জমা দিন সম্পূর্ণ বিনামূল্যে। জনগণ রেটিং ও যৌক্তিক সমালোচনা করবে, আর শীর্ষ বাছাইকৃত উদ্যোগ বাস্তবায়িত হবে আপনার নিজ এলাকায়—১০০ টাকার স্বচ্ছ জন-তহবিলে।
+              আপনার এলাকার সমস্যা সমাধানের বুদ্ধি জমা দিন সম্পূর্ণ বিনামূল্যে। জনগণ রেটিং ও যৌক্তিক সমালোচনা করবে, আর শীর্ষ বাছাইকৃত উদ্যোগ বাস্তবায়িত হবে আপনার নিজ এলাকায়—স্বচ্ছ ও জবাবদিহিতামূলক মডেলে।
             </p>
           </div>
 
-          {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
             <Link
               href="/submit-idea"
@@ -51,7 +80,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          {/* Live Transparency Trust Banner */}
+          {/* Real Transparency Pillars */}
           <div className="pt-8 max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-3 text-left">
             <div className="glass-panel p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
               <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">১০০%</p>
@@ -59,15 +88,15 @@ export default function HomePage() {
             </div>
             <div className="glass-panel p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
               <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">৬৪ জেলা</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">দেশব্যাপী পরিধি</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">জাতীয় অংশীদারিত্ব</p>
             </div>
             <div className="glass-panel p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">৳ ১০০</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">ঐচ্ছিক নাগরিক ফান্ডিং</p>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">১০০ ৳</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">ঐচ্ছিক অনুদান রূপরেখা</p>
             </div>
             <div className="glass-panel p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
-              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">লাইভ</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">উন্মুক্ত ব্যয় ও লেজার</p>
+              <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">০%</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">কাল্পনিক তথ্য বর্জিত</p>
             </div>
           </div>
         </div>
@@ -84,18 +113,16 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          {/* Step 1 */}
           <div className="glass-panel p-6 rounded-2xl relative border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 transition-all group">
             <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-lg mb-4 group-hover:scale-110 transition-transform">
               ১
             </div>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-2">ফ্রি আইডিয়া সাবমিশন</h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Google দিয়ে এক ক্লিকে সাইন-ইন করে আপনার জেলার সমস্যা ও সমাধানের আইডিয়া দিন। ফোন নম্বর গোপন রাখা হবে।
+              Google দিয়ে এক ক্লিকে সাইন-ইন করে আপনার জেলার সমস্যা ও সমাধানের আইডিয়া দিন। ফোন নম্বর সুরক্ষিত রাখা হয়।
             </p>
           </div>
 
-          {/* Step 2 */}
           <div className="glass-panel p-6 rounded-2xl relative border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 transition-all group">
             <div className="w-12 h-12 rounded-xl bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold text-lg mb-4 group-hover:scale-110 transition-transform">
               ২
@@ -106,7 +133,6 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Step 3 */}
           <div className="glass-panel p-6 rounded-2xl relative border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 transition-all group">
             <div className="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-lg mb-4 group-hover:scale-110 transition-transform">
               ৩
@@ -117,7 +143,6 @@ export default function HomePage() {
             </p>
           </div>
 
-          {/* Step 4 */}
           <div className="glass-panel p-6 rounded-2xl relative border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 transition-all group">
             <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-lg mb-4 group-hover:scale-110 transition-transform">
               ৪
@@ -130,164 +155,61 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Featured Project & Live Transparent Ledger Spotlight */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Active Pilot Project Card */}
-          <div className="lg:col-span-2 glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-6">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                পাইলট প্রকল্প · রংপুর
-              </span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                লক্ষ্যমাত্রা: ৩০ নভেম্বর ২০২৬
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-white">
-                {featuredProject.title}
-              </h3>
-              <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                {featuredProject.description}
-              </p>
-            </div>
-
-            {/* Fundraiser Progress */}
-            <div className="space-y-2 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
-              <div className="flex justify-between items-baseline">
-                <span className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
-                  {featuredProject.raisedAmount.toLocaleString('bn-BD')} ৳
+      {/* Featured Community Idea from Notice Board */}
+      {featuredIdea && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="glass-panel p-8 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  জন-নোটিশ বোর্ড ফিচারড আইডিয়া
                 </span>
-                <span className="text-xs text-slate-500">
-                  লক্ষ্য: {featuredProject.goalAmount.toLocaleString('bn-BD')} ৳ ({Math.round((featuredProject.raisedAmount / featuredProject.goalAmount) * 100)}%)
-                </span>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
+                  {featuredIdea.title}
+                </h3>
               </div>
-
-              {/* Progress bar */}
-              <div className="w-full h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.round((featuredProject.raisedAmount / featuredProject.goalAmount) * 100))}%` }}
-                />
-              </div>
-
-              <div className="flex justify-between text-xs text-slate-500 pt-1">
-                <span>{featuredProject.backersCount.toLocaleString('bn-BD')} জন নাগরিক অংশ নিয়েছেন</span>
-                <span>অবশিষ্ট: {(featuredProject.goalAmount - featuredProject.raisedAmount).toLocaleString('bn-BD')} ৳</span>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center text-amber-500">
+                  <Star className="w-5 h-5 fill-current" />
+                  <span className="font-bold text-base ml-1 text-slate-900 dark:text-white">{featuredIdea.rating || 5.0}</span>
+                </div>
+                <span className="text-xs text-slate-500">({featuredIdea.ratingCount || 0} ভোট)</span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                <MapPin className="w-4 h-4 text-emerald-600" />
-                <span>{featuredProject.location}</span>
+            <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+              {featuredIdea.summary || featuredIdea.problem}
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">সমস্যা</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">{featuredIdea.problem}</p>
               </div>
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">সমাধান</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300">{featuredIdea.solution}</p>
+              </div>
+              <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">প্রাক্কলিত বাজেট</p>
+                <p className="text-lg font-extrabold text-slate-900 dark:text-white">{featuredIdea.budgetEstimate || featuredIdea.estimatedBudget || 'প্রস্তাবনাধীন'}</p>
+                <p className="text-[11px] text-slate-500">লোকেশন: {featuredIdea.upazila || 'সদর'}</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
+              <span className="text-xs text-slate-500">আইডিয়া সাবমিটকারীর নাম জনস্বার্থে গোপন রাখা হয়</span>
               <Link
-                href="/projects"
-                className="inline-flex items-center gap-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:underline"
+                href="/notice-board"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors"
               >
-                <span>বিস্তারিত ও ১০০ টাকা অনুদান দিন</span>
-                <ChevronRight className="w-4 h-4" />
+                <span>নোটিশ বোর্ডে রেটিং দিন</span>
+                <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
-
-          {/* Live Micro-Ledger Feed */}
-          <div className="glass-panel p-6 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white">লাইভ অনুদান লেজার</h4>
-              </div>
-              <span className="text-[11px] text-slate-400">স্বচ্ছ ট্র্যাকার</span>
-            </div>
-
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              নিরাপত্তার স্বার্থে ডোনারদের মোবাইল নম্বরের মাঝের ৫টি ডিজিট এনক্রিপ্ট করে দেখানো হয়।
-            </p>
-
-            <div className="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
-              {liveLedger.map((tx) => (
-                <div
-                  key={tx.id}
-                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/50 dark:border-slate-700/50 text-xs"
-                >
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-slate-800 dark:text-slate-200">{tx.phoneMasked}</p>
-                    <p className="text-[10px] text-slate-500">{tx.projectTitle} · {tx.time}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-emerald-600 dark:text-emerald-400">+{tx.amount} ৳</span>
-                    <p className="text-[10px] text-slate-400 uppercase">{tx.method}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <Link
-              href="/projects"
-              className="block w-full text-center py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:text-emerald-600 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-            >
-              সব ট্রাঞ্জেকশন হিস্ট্রি দেখুন →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Community Idea from Notice Board */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="glass-panel p-8 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                নোটিশ বোর্ড সেরা রেটেড আইডিয়া
-              </span>
-              <h3 className="text-2xl font-bold text-slate-900 dark:text-white mt-1">
-                {featuredIdea.title}
-              </h3>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center text-amber-500">
-                <Star className="w-5 h-5 fill-current" />
-                <span className="font-bold text-base ml-1 text-slate-900 dark:text-white">{featuredIdea.rating}</span>
-              </div>
-              <span className="text-xs text-slate-500">({featuredIdea.ratingCount} রেটিং)</span>
-            </div>
-          </div>
-
-          <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-            {featuredIdea.summary}
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-              <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">সমস্যা</p>
-              <p className="text-xs text-slate-600 dark:text-slate-300">{featuredIdea.problem}</p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-              <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 mb-1">সমাধান</p>
-              <p className="text-xs text-slate-600 dark:text-slate-300">{featuredIdea.solution}</p>
-            </div>
-            <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
-              <p className="text-xs font-bold text-blue-600 dark:text-blue-400 mb-1">প্রাক্কলিত বাজেট</p>
-              <p className="text-lg font-extrabold text-slate-900 dark:text-white">{featuredIdea.budgetEstimate}</p>
-              <p className="text-[11px] text-slate-500">লোকেশন: {featuredIdea.upazila}, রংপুর</p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-4 border-t border-slate-200 dark:border-slate-800">
-            <span className="text-xs text-slate-500">আইডিয়া সাবমিটকারীর নাম জনস্বার্থে গোপন রাখা হয়েছে</span>
-            <Link
-              href="/notice-board"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors"
-            >
-              <span>রেটিং ও সমালোচনা দিন</span>
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Sustainable Welfare Banner */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

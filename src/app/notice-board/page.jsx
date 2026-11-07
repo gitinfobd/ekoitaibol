@@ -1,24 +1,59 @@
 'use client';
 
-import { useState } from 'react';
-import { initialIdeas } from '@/lib/data/mock-ideas';
+import { useState, useEffect } from 'react';
+import { 
+  collection, 
+  getDocs, 
+  query, 
+  where, 
+  doc, 
+  updateDoc, 
+  arrayUnion, 
+  getDoc 
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { useAuth } from '@/lib/firebase/auth-context';
 import { divisions, districts, categories } from '@/lib/data/districts';
-import { Star, MessageSquarePlus, ThumbsUp, AlertTriangle, Lightbulb, MapPin, Search, Filter, Sparkles, Check } from 'lucide-react';
+import { initialIdeas } from '@/lib/data/mock-ideas';
+import { Star, MessageSquarePlus, ThumbsUp, AlertTriangle, Lightbulb, MapPin, Search, Sparkles, Check, RefreshCw } from 'lucide-react';
 
 export default function NoticeBoardPage() {
-  const [ideas, setIdeas] = useState(initialIdeas);
+  const { user, signInWithGoogle } = useAuth();
+  const [ideas, setIdeas] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [selectedDivision, setSelectedDivision] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showDemoFallback, setShowDemoFallback] = useState(false);
   
-  // Feedback / Critique modal state
+  // Feedback modal
   const [activeIdeaForFeedback, setActiveIdeaForFeedback] = useState(null);
   const [feedbackType, setFeedbackType] = useState('positive');
   const [feedbackText, setFeedbackText] = useState('');
   const [votedIdeas, setVotedIdeas] = useState({});
 
-  // Filtered list
-  const filteredIdeas = ideas.filter(idea => {
+  const fetchNoticeBoardIdeas = async () => {
+    setLoading(true);
+    try {
+      // Query published ideas from Firestore
+      const q = query(collection(db, 'ideas'), where('isPublic', '==', true));
+      const querySnapshot = await getDocs(q);
+      const list = querySnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setIdeas(list);
+    } catch (err) {
+      console.warn('Notice board fetch note:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNoticeBoardIdeas();
+  }, []);
+
+  const displayIdeas = ideas.length > 0 ? ideas : (showDemoFallback ? initialIdeas : []);
+
+  const filteredIdeas = displayIdeas.filter(idea => {
     if (selectedCategory !== 'all' && idea.category !== selectedCategory) return false;
     if (selectedDivision !== 'all') {
       const dist = districts.find(d => d.id === idea.districtId);
@@ -26,79 +61,116 @@ export default function NoticeBoardPage() {
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchTitle = idea.title.toLowerCase().includes(q);
-      const matchSummary = idea.summary.toLowerCase().includes(q);
+      const matchTitle = (idea.title || '').toLowerCase().includes(q);
+      const matchSummary = (idea.summary || idea.solution || '').toLowerCase().includes(q);
       const matchLoc = (idea.upazila || '').toLowerCase().includes(q);
       if (!matchTitle && !matchSummary && !matchLoc) return false;
     }
     return true;
   });
 
-  const handleStarRating = (ideaId, starCount) => {
+  // Real Star Rating in Firestore
+  const handleStarRating = async (ideaId, starCount) => {
     if (votedIdeas[ideaId]) {
       alert('আপনি ইতিমধ্যে এই আইডিয়াটিতে রেটিং দিয়েছেন!');
       return;
     }
-    setIdeas(prev => prev.map(item => {
-      if (item.id === ideaId) {
-        const newCount = item.ratingCount + 1;
-        const newRating = Number(((item.rating * item.ratingCount + starCount) / newCount).toFixed(1));
-        return {
-          ...item,
-          rating: newRating,
-          ratingCount: newCount
-        };
+
+    try {
+      // Check if it's a Firestore document
+      const isFirestoreDoc = ideas.some(i => i.id === ideaId);
+      if (isFirestoreDoc) {
+        const ideaRef = doc(db, 'ideas', ideaId);
+        const currentDoc = await getDoc(ideaRef);
+        if (currentDoc.exists()) {
+          const data = currentDoc.data();
+          const currentCount = data.ratingCount || 0;
+          const currentStars = data.totalStars || (data.rating ? data.rating * currentCount : 0);
+          const newCount = currentCount + 1;
+          const newStars = currentStars + starCount;
+          const newRating = Number((newStars / newCount).toFixed(1));
+
+          await updateDoc(ideaRef, {
+            ratingCount: newCount,
+            totalStars: newStars,
+            rating: newRating
+          });
+        }
       }
-      return item;
-    }));
-    setVotedIdeas(prev => ({ ...prev, [ideaId]: starCount }));
+
+      setIdeas(prev => prev.map(item => {
+        if (item.id === ideaId) {
+          const newCount = (item.ratingCount || 0) + 1;
+          const newRating = Number((((item.rating || 5) * (item.ratingCount || 1) + starCount) / newCount).toFixed(1));
+          return { ...item, rating: newRating, ratingCount: newCount };
+        }
+        return item;
+      }));
+
+      setVotedIdeas(prev => ({ ...prev, [ideaId]: starCount }));
+    } catch (err) {
+      alert('রেটিং সংরক্ষণে ত্রুটি: ' + err.message);
+    }
   };
 
-  const handleAddCritique = (e) => {
+  // Real Critique in Firestore
+  const handleAddCritique = async (e) => {
     e.preventDefault();
     if (!feedbackText.trim() || !activeIdeaForFeedback) return;
 
     const newCritique = {
       id: `c-${Date.now()}`,
-      author: 'সচেতন নাগরিক',
+      author: user ? user.displayName || 'নাগরিক' : 'সচেতন নাগরিক',
       type: feedbackType,
-      text: feedbackText.trim()
+      text: feedbackText.trim(),
+      createdAt: new Date().toISOString()
     };
 
-    setIdeas(prev => prev.map(item => {
-      if (item.id === activeIdeaForFeedback.id) {
-        return {
-          ...item,
-          critiques: [...item.critiques, newCritique]
-        };
+    try {
+      const isFirestoreDoc = ideas.some(i => i.id === activeIdeaForFeedback.id);
+      if (isFirestoreDoc) {
+        const ideaRef = doc(db, 'ideas', activeIdeaForFeedback.id);
+        await updateDoc(ideaRef, {
+          critiques: arrayUnion(newCritique)
+        });
       }
-      return item;
-    }));
 
-    setFeedbackText('');
-    setActiveIdeaForFeedback(null);
+      setIdeas(prev => prev.map(item => {
+        if (item.id === activeIdeaForFeedback.id) {
+          return {
+            ...item,
+            critiques: [...(item.critiques || []), newCritique]
+          };
+        }
+        return item;
+      }));
+
+      setFeedbackText('');
+      setActiveIdeaForFeedback(null);
+    } catch (err) {
+      alert('পরামর্শ সংরক্ষণে সমস্যা: ' + err.message);
+    }
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Page Title & Schedule Banner */}
+      {/* Header */}
       <div className="text-center max-w-3xl mx-auto space-y-3">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-300 border border-emerald-300/50">
           <Sparkles className="w-3.5 h-3.5" />
-          <span>পাবলিক নোটিশ বোর্ড · মাসের শেষ ১০ দিনের উন্মুক্ত পর্যালোচনা</span>
+          <span>পাবলিক নোটিশ বোর্ড · অনুমোদিত নাগরিক প্রস্তাবনাসমূহ</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white">
           নাগরিক প্রস্তাবনা ও জন-মূল্যায়ন বোর্ড
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-          এখানে জমাকৃত সব আইডিয়া উন্মুক্ত। নিরপেক্ষতা রক্ষার্থে কোনো আইডিয়াতেই প্রস্তাবকের নাম নেই। ৫-স্টার পর্যন্ত রেটিং দিন এবং গঠনমূলক পরামর্শের মাধ্যমে আইডিয়াকে নিখুঁত করতে সাহায্য করুন।
+          এখানে জমাকৃত অনুমোদিত সব আইডিয়া উন্মুক্ত। নিরপেক্ষতা রক্ষার্থে কোনো আইডিয়াতেই প্রস্তাবকের নাম দৃশ্যমান থাকে না। ৫-স্টার পর্যন্ত রেটিং দিন এবং গঠনমূলক পরামর্শের মাধ্যমে আইডিয়াকে নিখুঁত করতে সাহায্য করুন।
         </p>
       </div>
 
       {/* Filter and Search Bar */}
       <div className="glass-panel p-4 sm:p-6 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          {/* Search box */}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3.5 top-3.5 text-slate-400" />
             <input
@@ -110,7 +182,6 @@ export default function NoticeBoardPage() {
             />
           </div>
 
-          {/* Division Filter */}
           <div>
             <select
               value={selectedDivision}
@@ -124,7 +195,6 @@ export default function NoticeBoardPage() {
             </select>
           </div>
 
-          {/* Category Filter */}
           <div>
             <select
               value={selectedCategory}
@@ -142,9 +212,33 @@ export default function NoticeBoardPage() {
 
       {/* Ideas Grid */}
       <div className="space-y-6">
-        {filteredIdeas.length === 0 ? (
-          <div className="text-center py-16 glass-panel rounded-2xl border border-slate-200 dark:border-slate-800">
-            <p className="text-slate-500 text-sm">কোনো আইডিয়া পাওয়া যায়নি। ভিন্ন ফিল্টার বা অনুসন্ধান শব্দ ব্যবহার করুন।</p>
+        {loading ? (
+          <div className="text-center py-16 glass-panel rounded-2xl">
+            <RefreshCw className="w-6 h-6 text-emerald-600 animate-spin mx-auto mb-2" />
+            <p className="text-xs text-slate-500">ক্লাউড ডাটাবেস থেকে আইডিয়া লোড হচ্ছে...</p>
+          </div>
+        ) : filteredIdeas.length === 0 ? (
+          <div className="text-center py-16 glass-panel rounded-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <p className="text-slate-600 dark:text-slate-300 font-semibold text-sm">
+              এখনও পাবলিক নোটিশ বোর্ডে কোনো আইডিয়া প্রকাশিত হয়নি।
+            </p>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              কোনো অবাস্তব বা বানোয়াট তথ্য প্রদর্শন না করে শতভাগ সত্যতা নিশ্চিত করা হয়। আপনি আপনার এলাকার সমস্যা সমাধানের প্রথম আইডিয়াটি জমা দিন।
+            </p>
+            <div className="flex justify-center gap-3 pt-2">
+              <a
+                href="/submit-idea"
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-md"
+              >
+                প্রথম আইডিয়া জমা দিন
+              </a>
+              <button
+                onClick={() => setShowDemoFallback(!showDemoFallback)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                {showDemoFallback ? 'নমুনা উদাহরণ লুকান' : 'নমুনা উদাহরণ দেখুন'}
+              </button>
+            </div>
           </div>
         ) : (
           filteredIdeas.map((idea, index) => {
@@ -156,7 +250,6 @@ export default function NoticeBoardPage() {
                 key={idea.id}
                 className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500/40 transition-all space-y-6"
               >
-                {/* Header: Rank + District + Rating */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <span className="w-8 h-8 rounded-lg bg-emerald-600 text-white font-extrabold text-sm flex items-center justify-center">
@@ -164,38 +257,35 @@ export default function NoticeBoardPage() {
                     </span>
                     <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1">
                       <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                      <span>{districtObj?.nameBn || 'রংপুর'} · {idea.upazila}</span>
+                      <span>{districtObj?.nameBn || idea.districtId || 'রংপুর'} · {idea.upazila}</span>
                     </span>
                     <span className="px-2.5 py-0.5 rounded text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300/40">
                       {categories.find(c => c.id === idea.category)?.nameBn || 'আইডিয়া'}
                     </span>
                   </div>
 
-                  {/* Rating summary */}
                   <div className="flex items-center gap-2">
                     <div className="flex items-center text-amber-500">
                       <Star className="w-5 h-5 fill-current" />
                       <span className="font-extrabold text-base ml-1.5 text-slate-900 dark:text-white">
-                        {idea.rating}
+                        {idea.rating || 5.0}
                       </span>
                     </div>
                     <span className="text-xs text-slate-500">
-                      ({idea.ratingCount} নাগরিক ভোট)
+                      ({idea.ratingCount || 0} ভোট)
                     </span>
                   </div>
                 </div>
 
-                {/* Title & Summary */}
                 <div className="space-y-2">
                   <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white">
                     {idea.title}
                   </h2>
                   <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {idea.summary}
+                    {idea.summary || idea.problem}
                   </p>
                 </div>
 
-                {/* Problem & Solution Details */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800">
                     <p className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1">চিহ্নিত সমস্যা:</p>
@@ -207,7 +297,6 @@ export default function NoticeBoardPage() {
                   </div>
                 </div>
 
-                {/* Critiques and Community Reviews */}
                 {idea.critiques && idea.critiques.length > 0 && (
                   <div className="space-y-2.5 pt-2">
                     <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
@@ -234,9 +323,7 @@ export default function NoticeBoardPage() {
                   </div>
                 )}
 
-                {/* Actions: Rate 1-5 Stars + Add Critique */}
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-4">
-                  {/* Interactive Star Voting */}
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                       আপনার মূল্যায়ন:
@@ -266,13 +353,12 @@ export default function NoticeBoardPage() {
                     )}
                   </div>
 
-                  {/* Add Critique Button */}
                   <button
                     onClick={() => setActiveIdeaForFeedback(idea)}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   >
                     <MessageSquarePlus className="w-4 h-4 text-emerald-600" />
-                    <span>সমালোচনা বা আইডিয়া উন্নয়ন পরামর্শ দিন</span>
+                    <span>সমালোচনা বা পরামর্শ দিন</span>
                   </button>
                 </div>
               </div>
@@ -353,7 +439,7 @@ export default function NoticeBoardPage() {
                   value={feedbackText}
                   onChange={(e) => setFeedbackText(e.target.value)}
                   required
-                  placeholder="যৌক্তিক ও গঠনমূলক পরামর্শ লিখুন যা এই আইডিয়াটির মাঠপর্যায়ের বাস্তবায়নকে আরও সফল করতে পারে..."
+                  placeholder="যৌক্তিক ও গঠনমূলক পরামর্শ লিখুন যা এই প্রস্তাবটির বাস্তবায়নকে নিখুঁত করতে পারে..."
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
                 />
               </div>

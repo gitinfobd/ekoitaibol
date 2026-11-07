@@ -1,13 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Lightbulb, Sparkles, ShieldCheck, CheckCircle2, AlertCircle, ArrowRight, Bot, Lock } from 'lucide-react';
+import { useState } from 'react';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { useAuth } from '@/lib/firebase/auth-context';
+import { Lightbulb, Sparkles, ShieldCheck, CheckCircle2, Lock, Bot, LogIn } from 'lucide-react';
 import { divisions, districts, categories } from '@/lib/data/districts';
 
 export default function SubmitIdeaPage() {
-  const [user, setUser] = useState(null);
+  const { user, signInWithGoogle } = useAuth();
   const [formData, setFormData] = useState({
-    fullName: '',
     phone: '',
     divisionId: 'rangpur',
     districtId: 'rangpur',
@@ -21,18 +23,9 @@ export default function SubmitIdeaPage() {
 
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState(null);
-  const [submitted, setSubmitted] = useState(false);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('ekotai_user');
-    if (saved) {
-      try {
-        const u = JSON.parse(saved);
-        setUser(u);
-        setFormData(prev => ({ ...prev, fullName: u.name || '' }));
-      } catch (e) {}
-    }
-  }, []);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionId, setSubmissionId] = useState(null);
+  const [submitError, setSubmitError] = useState(null);
 
   const filteredDistricts = districts.filter(d => d.divisionId === formData.divisionId);
 
@@ -51,21 +44,65 @@ export default function SubmitIdeaPage() {
       setAiAnalyzing(false);
       setAiAnalysis({
         viabilityScore: 92,
-        duplicateStatus: 'অনন্য (রংপুর অঞ্চলে কোনো ডুপ্লিকেট পাওয়া যায়নি)',
+        duplicateStatus: 'অনন্য (আপনার এলাকায় কোনো সদৃশ প্রস্তাব নেই)',
         suggestedCategory: categories.find(c => c.id === formData.category)?.nameBn || 'কৃষি ও খাদ্য',
         executiveSummary: `${formData.title}-এর মাধ্যমে স্থানীয় সমস্যাটির সমাধান সম্ভব। এটি কমিউনিটি চালিত হলে খরচ কমবে এবং দ্রুত বাস্তবায়ন হবে।`,
-        risks: 'প্রাথমিক বিদ্যুৎ ব্যাকআপ ও স্থানীয় কৃষকদের সমবায় সম্মতি নিশ্চিত করা প্রয়োজন।'
+        risks: 'প্রাথমিক ব্যয় ও স্থানীয় সুবিধাভোগীদের সম্মতি নিশ্চিত করা প্রয়োজন।'
       });
     }, 1200);
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.title || !formData.problem || !formData.solution) {
+    setSubmitError(null);
+
+    if (!user) {
+      try {
+        await signInWithGoogle();
+      } catch (err) {
+        alert('আইডিয়া জমা দিতে অনুগ্রহ করে প্রথমে Google দিয়ে সাইন-ইন করুন।');
+        return;
+      }
+    }
+
+    if (!formData.title.trim() || !formData.problem.trim() || !formData.solution.trim()) {
       alert('সবগুলো বাধ্যতামূলক তথ্য পূরণ করুন।');
       return;
     }
-    setSubmitted(true);
+
+    setIsSubmitting(true);
+
+    try {
+      const docRef = await addDoc(collection(db, 'ideas'), {
+        title: formData.title.trim(),
+        problem: formData.problem.trim(),
+        solution: formData.solution.trim(),
+        category: formData.category,
+        divisionId: formData.divisionId,
+        districtId: formData.districtId,
+        upazila: formData.upazila.trim() || 'সদর',
+        estimatedBudget: formData.budget.trim() || 'নির্ধারিত হয়নি',
+        authorUid: user.uid,
+        authorName: user.displayName || 'নাগরিক',
+        authorEmail: user.email || '',
+        authorPhone: formData.phone.trim(),
+        status: 'SUBMITTED', // Queued for admin review
+        isPublic: false, // Protected until approved
+        rating: 5.0,
+        ratingCount: 0,
+        totalStars: 0,
+        aiSummary: aiAnalysis ? aiAnalysis.executiveSummary : '',
+        viabilityScore: aiAnalysis ? aiAnalysis.viabilityScore : 85,
+        createdAt: serverTimestamp()
+      });
+
+      setSubmissionId(docRef.id);
+    } catch (err) {
+      console.error('Error submitting idea to Firestore:', err);
+      setSubmitError('আইডিয়া সংরক্ষণ করতে সমস্যা হয়েছে: ' + err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -80,28 +117,30 @@ export default function SubmitIdeaPage() {
           আপনার এলাকার সমস্যা সমাধানের আইডিয়া দিন
         </h1>
         <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
-          আইডিয়া জমা দিতে কোনো টাকা লাগবে না। AI আপনার প্রস্তাবটিকে গোছাতে সাহায্য করবে এবং মাসের নোটিশ বোর্ডে জনগণ নিরপেক্ষভাবে রেটিং দেবে।
+          আইডিয়া জমা দিতে কোনো টাকা লাগবে না। তথ্য সরাসরি ক্লাউড ডাটাবেসে সংরক্ষিত হবে এবং মডারেশন প্যানেলে যাচাই শেষে নোটিশ বোর্ডে উন্মুক্ত করা হবে।
         </p>
       </div>
 
-      {submitted ? (
+      {submissionId ? (
         <div className="glass-panel p-8 sm:p-12 rounded-3xl border border-emerald-500/40 text-center space-y-5 animate-fade-in">
           <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8" />
           </div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-            ধন্যবাদ! আপনার আইডিয়াটি সফলভাবে গৃহীত হয়েছে
+            ধন্যবাদ! আপনার আইডিয়াটি সফলভাবে ডাটাবেসে জমা হয়েছে
           </h2>
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs font-mono text-emerald-700 dark:text-emerald-300 max-w-md mx-auto">
+            Firestore ট্র্যাকিং আইডি: <strong>{submissionId}</strong>
+          </div>
           <p className="text-sm text-slate-600 dark:text-slate-300 max-w-lg mx-auto leading-relaxed">
-            অভ্যন্তরীণ AI যাচাইকরণ শেষে আপনার প্রস্তাবটি <span className="font-semibold text-emerald-600">"{formData.title}"</span> জনস্বার্থে নাম গোপন রেখে এই মাসের শেষ ১০ দিনের পাবলিক নোটিশ বোর্ডে ভোটিংয়ের জন্য প্রকাশিত হবে।
+            আপনার প্রস্তাবটি <span className="font-semibold text-emerald-600">"{formData.title}"</span> বর্তমানে অ্যাডমিন রিভিউ কিউতে রয়েছে। অ্যাডমিন অনুমোদন দিলে আপনার নাম গোপন রেখে এটি সরাসরি পাবলিক নোটিশ বোর্ডে চলে আসবে।
           </p>
           <div className="pt-4 flex justify-center gap-4">
             <button
               onClick={() => {
-                setSubmitted(false);
+                setSubmissionId(null);
                 setAiAnalysis(null);
                 setFormData({
-                  fullName: '',
                   phone: '',
                   divisionId: 'rangpur',
                   districtId: 'rangpur',
@@ -127,13 +166,37 @@ export default function SubmitIdeaPage() {
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-8">
+          {submitError && (
+            <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 text-rose-700 dark:text-rose-300 text-xs font-semibold">
+              {submitError}
+            </div>
+          )}
+
+          {/* User Sign-In Notice if not logged in */}
+          {!user && (
+            <div className="p-5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs text-emerald-900 dark:text-emerald-200">
+                <p className="font-bold text-sm">Google দিয়ে সাইন-ইন আবশ্যক:</p>
+                <p>আইডিয়া জমা দিতে এবং আপনার আইডিয়ার অগ্রগতি ট্র্যাক করতে গুগল দিয়ে সাইন ইন করুন।</p>
+              </div>
+              <button
+                type="button"
+                onClick={signInWithGoogle}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5 flex-shrink-0 shadow-sm"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Google দিয়ে লগইন করুন</span>
+              </button>
+            </div>
+          )}
+
           {/* Privacy Notice Banner */}
           <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-start gap-3">
             <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
             <div className="text-xs text-amber-900 dark:text-amber-200 space-y-1">
               <p className="font-bold">ব্যক্তিগত তথ্যের শতভাগ নিরাপত্তা:</p>
               <p className="leading-relaxed">
-                আপনার নাম ও মোবাইল নম্বর কেবল অভ্যন্তরীণ যোগাযোগ ও সত্যতা যাচাইয়ের জন্য নেওয়া হচ্ছে। পাবলিক নোটিশ বোর্ডে বা ভোটারদের কাছে আপনার কোনো ব্যক্তিগত তথ্য প্রকাশ করা হবে না।
+                আপনার নাম ও মোবাইল নম্বর কেবল অভ্যন্তরীণ ডাটাবেসে যোগাযোগ ও সত্যতা যাচাইয়ের জন্য রাখা হয়। পাবলিক নোটিশ বোর্ডে প্রস্তাবকের কোনো ব্যক্তিগত তথ্য প্রকাশ করা হয় না।
               </p>
             </div>
           </div>
@@ -142,28 +205,25 @@ export default function SubmitIdeaPage() {
           <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-6">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-emerald-600" />
-              <span>১. প্রস্তাবকের পরিচিতি (সম্পূর্ণ গোপন থাকবে)</span>
+              <span>১. প্রস্তাবকের পরিচিতি (ডাটাবেসে সংরক্ষিত ও গোপন)</span>
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  আপনার পূর্ণ নাম *
+                  আপনার নাম (Google অ্যাকাউন্ট থেকে স্বয়ংক্রিয়)
                 </label>
                 <input
                   type="text"
-                  name="fullName"
-                  value={formData.fullName}
-                  onChange={handleInputChange}
-                  required
-                  placeholder="যেমন: মোঃ রাফিদ হাসান"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                  disabled
+                  value={user ? user.displayName || user.email : 'প্রথমে লগইন করুন'}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-sm opacity-80 cursor-not-allowed"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  মোবাইল নম্বর (যাচাইয়ের জন্য) *
+                  মোবাইল নম্বর (যাচাইয়ের জন্য গোপন থাকবে) *
                 </label>
                 <input
                   type="tel"
@@ -272,7 +332,7 @@ export default function SubmitIdeaPage() {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/80 hover:bg-emerald-200 border border-emerald-300/60 transition-colors"
               >
                 <Bot className="w-4 h-4" />
-                <span>{aiAnalyzing ? 'AI বিশ্লেষণ করছে...' : 'AI কো-পাইলট দিয়ে যাচাই'}</span>
+                <span>{aiAnalyzing ? 'AI বিশ্লেষণ করছে...' : 'AI দিয়ে যাচাই'}</span>
               </button>
             </div>
 
@@ -362,12 +422,13 @@ export default function SubmitIdeaPage() {
           <div className="text-center pt-2">
             <button
               type="submit"
-              className="w-full sm:w-auto px-10 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-xl shadow-emerald-600/25 active:scale-95 transition-all text-base"
+              disabled={isSubmitting}
+              className="w-full sm:w-auto px-10 py-4 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-xl shadow-emerald-600/25 active:scale-95 disabled:opacity-50 transition-all text-base"
             >
-              বিনামূল্যে আইডিয়া জমা দিন
+              {isSubmitting ? 'ডাটাবেসে সংরক্ষণ হচ্ছে...' : 'বিনামূল্যে আইডিয়া জমা দিন'}
             </button>
             <p className="text-[11px] text-slate-500 mt-2">
-              জমা দেওয়ার মাধ্যমে আপনি একতাই বলের উন্মুক্ত জনস্বার্থ নীতিমালার সাথে একমত পোষণ করছেন।
+              জমা দেওয়ার মাধ্যমে আপনার আইডিয়াটি ক্লাউড ফায়ারস্টোর ডাটাবেসে রিয়েল-টাইমে সংরক্ষিত হবে।
             </p>
           </div>
         </form>

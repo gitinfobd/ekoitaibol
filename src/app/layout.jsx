@@ -1,6 +1,7 @@
 import './globals.css';
 import Navbar from '@/components/Navbar';
 import Footer from '@/components/Footer';
+import { AuthProvider } from '@/lib/firebase/auth-context';
 
 export const metadata = {
   metadataBase: new URL('https://ekoitaibol.com'),
@@ -60,9 +61,11 @@ export default function RootLayout({ children }) {
         />
       </head>
       <body className="min-h-screen flex flex-col font-sans antialiased">
-        <Navbar />
-        <main className="flex-grow">{children}</main>
-        <Footer />
+        <AuthProvider>
+          <Navbar />
+          <main className="flex-grow">{children}</main>
+          <Footer />
+        </AuthProvider>
       </body>
     </html>
   );

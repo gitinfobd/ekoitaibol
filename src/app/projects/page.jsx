@@ -1,58 +1,115 @@
 'use client';
 
-import { useState } from 'react';
-import { initialProjects, liveLedger } from '@/lib/data/mock-projects';
-import { HandCoins, ShieldCheck, FileText, CheckCircle2, MapPin, Calendar, Clock, CreditCard, ChevronRight, Lock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { 
+  collection, 
+  getDocs, 
+  addDoc, 
+  doc, 
+  updateDoc, 
+  increment, 
+  serverTimestamp, 
+  query, 
+  orderBy, 
+  limit 
+} from 'firebase/firestore';
+import { db } from '@/lib/firebase/config';
+import { useAuth } from '@/lib/firebase/auth-context';
+import { initialProjects } from '@/lib/data/mock-projects';
+import { HandCoins, ShieldCheck, FileText, CheckCircle2, MapPin, Calendar, Lock } from 'lucide-react';
 
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState(initialProjects);
-  const [transactions, setTransactions] = useState(liveLedger);
+  const { user } = useAuth();
+  const [projects, setProjects] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showSampleProjects, setShowSampleProjects] = useState(false);
+
+  // Donation Modal state
   const [activeDonationProject, setActiveDonationProject] = useState(null);
   const [donationAmount, setDonationAmount] = useState(100);
   const [donorPhone, setDonorPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('bKash');
   const [donationSuccess, setDonationSuccess] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleDonationSubmit = (e) => {
+  // Fetch Firestore Projects & Real Donations
+  const fetchProjectsAndDonations = async () => {
+    setLoading(true);
+    try {
+      // 1. Projects
+      const projSnap = await getDocs(collection(db, 'projects'));
+      const projs = projSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setProjects(projs);
+
+      // 2. Real Donations
+      const txQuery = query(collection(db, 'donations'), orderBy('createdAt', 'desc'), limit(20));
+      const txSnap = await getDocs(txQuery);
+      const txs = txSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTransactions(txs);
+    } catch (err) {
+      console.warn('Projects fetch note:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchProjectsAndDonations();
+  }, []);
+
+  const displayProjects = projects.length > 0 ? projects : (showSampleProjects ? initialProjects : []);
+
+  const handleDonationSubmit = async (e) => {
     e.preventDefault();
     if (!donorPhone || donorPhone.length < 11) {
       alert('সঠিক ১১ ডিজিটের মোবাইল নম্বর দিন।');
       return;
     }
 
+    setIsProcessing(true);
+
     // Mask phone number: 0171****890
     const masked = `${donorPhone.slice(0, 4)}****${donorPhone.slice(-3)}`;
-    const txId = `TX-${Math.floor(1000 + Math.random() * 9000)}`;
+    const txId = `TX-${Math.floor(10000 + Math.random() * 90000)}`;
 
-    const newTx = {
-      id: txId,
-      projectId: activeDonationProject.id,
-      projectTitle: activeDonationProject.title.slice(0, 20),
-      phoneMasked: masked,
-      amount: Number(donationAmount),
-      method: paymentMethod,
-      time: 'এইমাত্র'
-    };
+    try {
+      // Write to Firestore 'donations' collection
+      await addDoc(collection(db, 'donations'), {
+        txId,
+        projectId: activeDonationProject.id,
+        projectTitle: activeDonationProject.title,
+        phoneMasked: masked,
+        amount: Number(donationAmount),
+        method: paymentMethod,
+        donorUid: user ? user.uid : 'ANONYMOUS',
+        status: 'COMPLETED_SANDBOX',
+        createdAt: serverTimestamp()
+      });
 
-    // Update transactions & project raised amount
-    setTransactions(prev => [newTx, ...prev]);
-    setProjects(prev => prev.map(p => {
-      if (p.id === activeDonationProject.id) {
-        return {
-          ...p,
-          raisedAmount: p.raisedAmount + Number(donationAmount),
-          backersCount: p.backersCount + 1
-        };
+      // If it's a real Firestore project document, increment raisedAmount
+      const isFirestoreDoc = projects.some(p => p.id === activeDonationProject.id);
+      if (isFirestoreDoc) {
+        const projRef = doc(db, 'projects', activeDonationProject.id);
+        await updateDoc(projRef, {
+          raisedAmount: increment(Number(donationAmount)),
+          backersCount: increment(1)
+        });
       }
-      return p;
-    }));
 
-    setDonationSuccess({
-      txId,
-      amount: donationAmount,
-      maskedPhone: masked,
-      projectTitle: activeDonationProject.title
-    });
+      setDonationSuccess({
+        txId,
+        amount: donationAmount,
+        maskedPhone: masked,
+        projectTitle: activeDonationProject.title
+      });
+
+      fetchProjectsAndDonations();
+    } catch (err) {
+      alert('অনুদান সংরক্ষণে সমস্যা: ' + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const closeDonationModal = () => {
@@ -80,137 +137,96 @@ export default function ProjectsPage() {
 
       {/* Projects List */}
       <div className="space-y-10">
-        {projects.map((project) => {
-          const percent = Math.min(100, Math.round((project.raisedAmount / project.goalAmount) * 100));
-
-          return (
-            <div
-              key={project.id}
-              className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-6"
-            >
-              {/* Top Meta */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
-                    চলমান বাস্তবায়ন
-                  </span>
-                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1">
-                    <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{project.location}</span>
-                  </span>
-                </div>
-                <div className="text-xs text-slate-500 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5" />
-                  <span>সময়সীমা: {project.targetDate} পর্যন্ত</span>
-                </div>
-              </div>
-
-              {/* Title & Description */}
-              <div className="space-y-2">
-                <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
-                  {project.title}
-                </h2>
-                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                  {project.description}
-                </p>
-              </div>
-
-              {/* Progress and Funding Status */}
-              <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
-                <div className="flex flex-wrap justify-between items-baseline gap-2">
-                  <div>
-                    <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
-                      {project.raisedAmount.toLocaleString('bn-BD')} ৳
-                    </span>
-                    <span className="text-xs text-slate-500 ml-2">
-                      উত্তোলিত (লক্ষ্য: {project.goalAmount.toLocaleString('bn-BD')} ৳)
-                    </span>
-                  </div>
-                  <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
-                    {percent}% সম্পন্ন
-                  </span>
-                </div>
-
-                {/* Progress bar */}
-                <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
-                    style={{ width: `${percent}%` }}
-                  />
-                </div>
-
-                <div className="flex justify-between text-xs text-slate-500 pt-1">
-                  <span>{project.backersCount.toLocaleString('bn-BD')} জন নাগরিক অংশ নিয়েছেন</span>
-                  <span>বাকি প্রয়োজন: {(project.goalAmount - project.raisedAmount).toLocaleString('bn-BD')} ৳</span>
-                </div>
-              </div>
-
-              {/* Budget Breakdown & Employment Impact */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-800 space-y-2">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
-                    বাজেট বণ্টন তালিকা
-                  </h4>
-                  <ul className="space-y-1.5 text-xs text-slate-600 dark:text-slate-300">
-                    {project.budgetBreakdown.map((b, i) => (
-                      <li key={i} className="flex justify-between border-b border-slate-200/60 dark:border-slate-700/40 pb-1">
-                        <span>{b.item}</span>
-                        <span className="font-bold text-slate-900 dark:text-white">{b.cost}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div className="p-4 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/60 dark:border-emerald-900/40 space-y-2">
-                  <h4 className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
-                    স্থানীয় কর্মসংস্থান ও কল্যাণ সুবিধা
-                  </h4>
-                  <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                    {project.employmentImpact}
-                  </p>
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400 font-semibold pt-1">
-                    ✓ শ্রম আইন ২০০৬ ও সর্বজনীন পেনশন স্কিমে তালিকাভুক্ত
-                  </p>
-                </div>
-              </div>
-
-              {/* Audited Expenses (if any) */}
-              {project.expenses && project.expenses.length > 0 && (
-                <div className="space-y-2 pt-2">
-                  <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                    <FileText className="w-4 h-4 text-emerald-600" />
-                    <span>অডিটকৃত খরচের খতিয়ান ({project.expenses.length})</span>
-                  </h4>
-                  <div className="space-y-1.5">
-                    {project.expenses.map((exp, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/60 text-xs"
-                      >
-                        <div>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">{exp.title}</span>
-                          <span className="text-[10px] text-slate-400 ml-2">({exp.date} · ভাউচার #{exp.voucherId})</span>
-                        </div>
-                        <span className="font-bold text-rose-600 dark:text-rose-400">-{exp.amount.toLocaleString('bn-BD')} ৳</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Action Button */}
-              <div className="pt-2 flex justify-end">
-                <button
-                  onClick={() => setActiveDonationProject(project)}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-600/20 active:scale-95 transition-all text-sm"
-                >
-                  <HandCoins className="w-4 h-4" />
-                  <span>১০০ টাকা অনুদান দিয়ে অংশ নিন</span>
-                </button>
-              </div>
+        {displayProjects.length === 0 ? (
+          <div className="text-center py-16 glass-panel rounded-3xl border border-slate-200 dark:border-slate-800 space-y-4">
+            <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+              এখনও ডাটাবেসে কোনো সক্রিয় প্রকল্প অর্থায়নের জন্য প্রকাশিত হয়নি
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              স্বচ্ছতার স্বার্থে কোনো কাল্পনিক বা অসত্য তহবিল সংগ্রহ দেখানো হয় না। অ্যাডমিন প্যানেল থেকে যখন কোনো নির্বাচিত আইডিয়া প্রকল্পের রূপ নেবে, তখন তা এখানে প্রদর্শিত হবে।
+            </p>
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                onClick={() => setShowSampleProjects(!showSampleProjects)}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                {showSampleProjects ? 'নমুনা প্রকল্প লুকান' : 'নমুনা প্রকল্প প্রস্তাবনা দেখুন'}
+              </button>
             </div>
-          );
-        })}
+          </div>
+        ) : (
+          displayProjects.map((project) => {
+            const goal = project.goalAmount || 100000;
+            const raised = project.raisedAmount || 0;
+            const percent = Math.min(100, Math.round((raised / goal) * 100));
+
+            return (
+              <div
+                key={project.id}
+                className="glass-panel p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-slate-800 space-y-6"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300">
+                      {project.isPilot ? 'পাইলট প্রকল্প' : 'বাস্তবায়ন তহবিল'}
+                    </span>
+                    <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>{project.location}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
+                    {project.title}
+                  </h2>
+                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {project.description}
+                  </p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                  <div className="flex flex-wrap justify-between items-baseline gap-2">
+                    <div>
+                      <span className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                        {raised.toLocaleString('bn-BD')} ৳
+                      </span>
+                      <span className="text-xs text-slate-500 ml-2">
+                        উত্তোলিত (লক্ষ্য: {goal.toLocaleString('bn-BD')} ৳)
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      {percent}% সম্পন্ন
+                    </span>
+                  </div>
+
+                  <div className="w-full h-3.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500"
+                      style={{ width: `${percent}%` }}
+                    />
+                  </div>
+
+                  <div className="flex justify-between text-xs text-slate-500 pt-1">
+                    <span>{(project.backersCount || 0).toLocaleString('bn-BD')} জন নাগরিক অংশ নিয়েছেন</span>
+                    <span>বাকি প্রয়োজন: {Math.max(0, goal - raised).toLocaleString('bn-BD')} ৳</span>
+                  </div>
+                </div>
+
+                <div className="pt-2 flex justify-end">
+                  <button
+                    onClick={() => setActiveDonationProject(project)}
+                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 shadow-md shadow-emerald-600/20 active:scale-95 transition-all text-sm"
+                  >
+                    <HandCoins className="w-4 h-4" />
+                    <span>১০০ টাকা অনুদান দিয়ে অংশ নিন (স্যান্ডবক্স)</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Live Masked Ledger Section */}
@@ -222,44 +238,50 @@ export default function ProjectsPage() {
               <span>লাইভ নাগরিক অনুদান লেজার (Live Public Ledger)</span>
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              স্বচ্ছতার স্বার্থে প্রতিটি ট্রাঞ্জেকশন রিয়েল-টাইম আপডেট হয়। দাতার গোপনীয়তা রক্ষায় মোবাইল নম্বরের মধ্যবর্তী অংশ এনক্রিপ্ট করা।
+              স্বচ্ছতার স্বার্থে প্রতিটি ট্রাঞ্জেকশন ক্লাউড ডাটাবেস থেকে রিয়েল-টাইম আপডেট হয়। দাতার গোপনীয়তা রক্ষায় মোবাইল নম্বরের মধ্যবর্তী অংশ এনক্রিপ্ট করা থাকে।
             </p>
           </div>
           <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-            সর্বমোট {transactions.length} টি লেনদেন
+            {transactions.length} টি ভেরিফাইড লেনদেন
           </span>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold">
-                <th className="py-3 px-3">ট্রাঞ্জেকশন আইডি</th>
-                <th className="py-3 px-3">প্রকল্প</th>
-                <th className="py-3 px-3">দাতার ফোন (এনক্রিপ্টেড)</th>
-                <th className="py-3 px-3">মাধ্যম</th>
-                <th className="py-3 px-3">পরিমাণ</th>
-                <th className="py-3 px-3">সময়</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {transactions.map((tx) => (
-                <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">{tx.id}</td>
-                  <td className="py-3 px-3 text-slate-800 dark:text-slate-200">{tx.projectTitle}</td>
-                  <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">{tx.phoneMasked}</td>
-                  <td className="py-3 px-3">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      {tx.method}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 font-bold text-emerald-600 dark:text-emerald-400">+{tx.amount} ৳</td>
-                  <td className="py-3 px-3 text-slate-500">{tx.time}</td>
+        {transactions.length === 0 ? (
+          <div className="py-10 text-center text-xs text-slate-400">
+            এখনও ডাটাবেসে কোনো অনুদান লেনদেন রেকর্ড হয়নি। ১০০ টাকা অনুদান দিলে তা সাথে সাথে এখানে যুক্ত হবে।
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-500 font-semibold">
+                  <th className="py-3 px-3">ট্রাঞ্জেকশন আইডি</th>
+                  <th className="py-3 px-3">প্রকল্প</th>
+                  <th className="py-3 px-3">দাতার ফোন (এনক্রিপ্টেড)</th>
+                  <th className="py-3 px-3">মাধ্যম</th>
+                  <th className="py-3 px-3">পরিমাণ</th>
+                  <th className="py-3 px-3">স্ট্যাটাস</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {transactions.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-3 font-mono font-bold text-slate-700 dark:text-slate-300">{tx.txId || tx.id}</td>
+                    <td className="py-3 px-3 text-slate-800 dark:text-slate-200">{tx.projectTitle}</td>
+                    <td className="py-3 px-3 font-mono text-slate-600 dark:text-slate-400">{tx.phoneMasked}</td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        {tx.method}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-bold text-emerald-600 dark:text-emerald-400">+{tx.amount} ৳</td>
+                    <td className="py-3 px-3 text-slate-500 font-mono text-[11px]">{tx.status || 'সফল'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {/* Donation Modal */}
@@ -272,7 +294,7 @@ export default function ProjectsPage() {
                   <CheckCircle2 className="w-7 h-7" />
                 </div>
                 <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-                  ধন্যবাদ! অনুদান সফল হয়েছে
+                  ধন্যবাদ! অনুদান সফলভাবে সংরক্ষিত হয়েছে
                 </h3>
                 <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs space-y-1.5 text-slate-600 dark:text-slate-300">
                   <p><strong>ট্রাঞ্জেকশন আইডি:</strong> {donationSuccess.txId}</p>
@@ -281,7 +303,7 @@ export default function ProjectsPage() {
                   <p><strong>প্রকল্প:</strong> {donationSuccess.projectTitle}</p>
                 </div>
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  আপনার অবদানটি উন্মুক্ত পাবলিক লেজারে তাৎক্ষণিকভাবে অন্তর্ভুক্ত করা হয়েছে।
+                  আপনার অবদানটি ক্লাউড ফায়ারস্টোর পাবলিক লেজারে তাৎক্ষণিকভাবে অন্তর্ভুক্ত করা হয়েছে।
                 </p>
                 <button
                   onClick={closeDonationModal}
@@ -295,7 +317,7 @@ export default function ProjectsPage() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                      নাগরিক মাইক্রো-অনুদান
+                      নাগরিক মাইক্রো-অনুদান (স্যান্ডবক্স)
                     </h3>
                     <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">
                       {activeDonationProject.title}
@@ -310,7 +332,6 @@ export default function ProjectsPage() {
                 </div>
 
                 <form onSubmit={handleDonationSubmit} className="space-y-4">
-                  {/* Preset Amount */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                       অনুদানের পরিমাণ (টাকা):
@@ -333,7 +354,6 @@ export default function ProjectsPage() {
                     </div>
                   </div>
 
-                  {/* Payment Method */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                       পেমেন্ট মেথড:
@@ -356,7 +376,6 @@ export default function ProjectsPage() {
                     </div>
                   </div>
 
-                  {/* Phone input */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                       আপনার মোবাইল নম্বর *
@@ -375,9 +394,8 @@ export default function ProjectsPage() {
                     </div>
                   </div>
 
-                  {/* Legal disclaimer */}
                   <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/80 text-[11px] text-slate-500 leading-relaxed">
-                    এই অনুদান সম্পূর্ণ ঐচ্ছিক ও জনস্বার্থে। এর মাধ্যমে কোনো চাকরি, নিয়োগ বা লটারি প্রাপ্তির অধিকার জন্মায় না।
+                    এই অনুদান সম্পূর্ণ ঐচ্ছিক ও জনস্বার্থে। এর মাধ্যমে কোনো চাকরি বা লটারির অধিকার জন্মায় না।
                   </div>
 
                   <div className="flex justify-end gap-3 pt-2">
@@ -390,9 +408,10 @@ export default function ProjectsPage() {
                     </button>
                     <button
                       type="submit"
+                      disabled={isProcessing}
                       className="px-5 py-2 text-xs font-bold rounded-xl text-white bg-emerald-600 hover:bg-emerald-700 shadow-md"
                     >
-                      {donationAmount} ৳ অনুদান নিশ্চিত করুন
+                      {isProcessing ? 'সংরক্ষণ হচ্ছে...' : `${donationAmount} ৳ অনুদান নিশ্চিত করুন`}
                     </button>
                   </div>
                 </form>
