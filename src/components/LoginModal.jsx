@@ -9,7 +9,6 @@ export default function LoginModal({ isOpen, onClose }) {
     user, 
     signInWithGoogle, 
     signInWithGoogleRedirect, 
-    signInAsDemoUser, 
     authError, 
     clearAuthError 
   } = useAuth();
@@ -32,11 +31,6 @@ export default function LoginModal({ isOpen, onClose }) {
     signInWithGoogleRedirect().catch((err) => {
       console.warn('Login modal redirect caught:', err);
     });
-  };
-
-  const handleDemoLogin = (role) => {
-    signInAsDemoUser(role);
-    onClose();
   };
 
   return (
@@ -124,42 +118,18 @@ export default function LoginModal({ isOpen, onClose }) {
               )}
               
               {authError.code === 'auth/unauthorized-domain' && (
-                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl text-[11px] text-slate-600 dark:text-slate-400 space-y-1 border border-slate-200 dark:border-slate-800">
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">Firebase Console-এ সমাধান:</p>
-                  <p>১. <a href="https://console.firebase.google.com/project/ekoitaibol/authentication/settings" target="_blank" rel="noreferrer" className="text-emerald-600 underline inline-flex items-center gap-0.5">Firebase Console Settings <ExternalLink className="w-3 h-3" /></a> এ যান।</p>
-                  <p>২. <strong>Authorized domains</strong> এ <strong>Add domain</strong> ক্লিক করে <code className="bg-slate-100 dark:bg-slate-800 px-1 py-0.5 rounded text-emerald-600 font-mono">ekoitaibol.vercel.app</code> যোগ করুন।</p>
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl text-[11px] text-slate-600 dark:text-slate-400 space-y-1.5 border border-slate-200 dark:border-slate-800">
+                  <p className="font-semibold text-rose-600 dark:text-rose-400">বানান মেলেনি (ডোমেইন টাইপো সতর্কতা):</p>
+                  <p>Firebase Console-এ বানানটি নিশ্চিত করুন:</p>
+                  <p>❌ ভুল: <code className="bg-rose-50 text-rose-700 px-1 py-0.5 rounded font-mono">ekotaibol.vercel.app</code> (মাঝের 'i' বাদ পড়েছে)</p>
+                  <p>✅ সঠিক: <code className="bg-emerald-50 text-emerald-700 font-bold px-1 py-0.5 rounded font-mono">ekoitaibol.vercel.app</code></p>
+                  <p className="pt-1">
+                    👉 <a href="https://console.firebase.google.com/project/ekoitaibol/authentication/settings" target="_blank" rel="noreferrer" className="text-emerald-600 underline font-semibold inline-flex items-center gap-0.5">Firebase Console &gt; Authorized Domains <ExternalLink className="w-3 h-3" /></a>-এ গিয়ে <strong className="text-slate-800 dark:text-slate-200">ekoitaibol.vercel.app</strong> যোগ করুন।
+                  </p>
                 </div>
               )}
             </div>
           )}
-        </div>
-
-        {/* Instant Testing Bypass Options */}
-        <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2.5 text-center">
-          <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-            অথবা ডোমেইন এপ্রুভালের সময়ে ইনস্ট্যান্ট টেস্ট মোড:
-          </p>
-
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleDemoLogin('CITIZEN')}
-              className="py-2.5 px-3 rounded-xl text-xs font-semibold border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <User className="w-3.5 h-3.5 text-emerald-600" />
-              <span>নাগরিক টেস্ট লগইন</span>
-            </button>
-
-            <button
-              onClick={() => handleDemoLogin('SUPER_ADMIN')}
-              className="py-2.5 px-3 rounded-xl text-xs font-bold border border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 hover:bg-amber-100/50 flex items-center justify-center gap-1.5 transition-colors"
-            >
-              <ShieldAlert className="w-3.5 h-3.5 text-amber-600" />
-              <span>অ্যাডমিন টেস্ট লগইন</span>
-            </button>
-          </div>
-          <p className="text-[10px] text-slate-400">
-            ইনস্ট্যান্ট টেস্ট মোডে আপনি এখনই পূর্ণ ডাটাবেস ও অ্যাডমিন কিউ টেস্ট করতে পারবেন।
-          </p>
         </div>
       </div>
     </div>

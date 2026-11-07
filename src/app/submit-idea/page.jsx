@@ -9,7 +9,7 @@ import { divisions, districts, categories } from '@/lib/data/districts';
 import LoginModal from '@/components/LoginModal';
 
 export default function SubmitIdeaPage() {
-  const { user, signInWithGoogle, signInAsDemoUser } = useAuth();
+  const { user, signInWithGoogle } = useAuth();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     phone: '',
@@ -181,17 +181,10 @@ export default function SubmitIdeaPage() {
                 <button
                   type="button"
                   onClick={() => setLoginModalOpen(true)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
+                  className="px-4 py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center gap-1.5 shadow-sm active:scale-95 transition-all"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>Google দিয়ে লগইন</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => signInAsDemoUser('CITIZEN')}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 hover:bg-emerald-50 transition-colors"
-                >
-                  ইনস্ট্যান্ট টেস্ট সাইন-ইন
+                  <span>Google দিয়ে লগইন করুন</span>
                 </button>
               </div>
             </div>

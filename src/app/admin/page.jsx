@@ -17,7 +17,7 @@ import { ShieldCheck, Check, X, Plus, FileText, Lock, LogIn, Sparkles, RefreshCw
 import LoginModal from '@/components/LoginModal';
 
 export default function AdminPage() {
-  const { user, loading: authLoading, isAdmin, signInWithGoogle, signInAsDemoUser } = useAuth();
+  const { user, loading: authLoading, isAdmin, signInWithGoogle } = useAuth();
   const [loginModalOpen, setLoginModalOpen] = useState(false);
   const [ideas, setIdeas] = useState([]);
   const [projects, setProjects] = useState([]);
@@ -166,15 +166,7 @@ export default function AdminPage() {
             className="w-full py-3.5 rounded-xl font-bold text-white bg-emerald-600 hover:bg-emerald-700 flex items-center justify-center gap-2 text-sm shadow-md active:scale-95 transition-all"
           >
             <LogIn className="w-4 h-4" />
-            <span>Google দিয়ে সাইন-ইন</span>
-          </button>
-
-          <button
-            onClick={() => signInAsDemoUser('SUPER_ADMIN')}
-            className="w-full py-3 rounded-xl font-semibold text-slate-800 dark:text-slate-200 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-400/40 dark:border-amber-600/40 flex items-center justify-center gap-2 text-xs transition-colors"
-          >
-            <ShieldCheck className="w-4 h-4 text-amber-600" />
-            <span>এক ক্লিকে সুপার অ্যাডমিন টেস্ট প্রবেশ</span>
+            <span>Google দিয়ে সাইন-ইন করুন</span>
           </button>
         </div>
 
@@ -197,7 +189,7 @@ export default function AdminPage() {
             <ExternalLink className="w-3 h-3" />
           </a>
           <p className="text-[10px] text-slate-500">
-            সেখানে "Add domain" দিয়ে <code className="bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded text-emerald-600 font-mono">ekoitaibol.vercel.app</code> যোগ করলেই গুগল লগইন সার্বজনীনভাবে চালু হবে।
+            সেখানে "Add domain" দিয়ে <code className="bg-slate-200 dark:bg-slate-700 px-1 py-0.5 rounded text-emerald-600 font-mono font-bold">ekoitaibol.vercel.app</code> (ekoitaibol) যোগ করলেই গুগল লগইন চালু হবে।
           </p>
         </div>
 
@@ -227,13 +219,6 @@ export default function AdminPage() {
             className="w-full py-2.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm"
           >
             {isElevating ? 'অনুমোদন হচ্ছে...' : 'মালিকানা নিশ্চিত করে সুপারঅ্যাডমিন সক্রিয় করুন'}
-          </button>
-
-          <button
-            onClick={() => signInAsDemoUser('SUPER_ADMIN')}
-            className="w-full py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            অথবা সুপারঅ্যাডমিন টেস্ট মোডে সুইচ করুন
           </button>
         </div>
       </div>

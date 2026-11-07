@@ -19,7 +19,6 @@ const AuthContext = createContext({
   clearAuthError: () => {},
   signInWithGoogle: async () => {},
   signInWithGoogleRedirect: async () => {},
-  signInAsDemoUser: (role) => {},
   signOut: async () => {}
 });
 
@@ -37,17 +36,6 @@ export function AuthProvider({ children }) {
   const [authError, setAuthError] = useState(null);
 
   useEffect(() => {
-    // Check local storage for simulated/demo session if offline
-    const savedDemoUser = localStorage.getItem('ekotai_demo_user');
-    if (savedDemoUser) {
-      try {
-        const parsed = JSON.parse(savedDemoUser);
-        setUser(parsed);
-        setIsAdmin(parsed.role === 'SUPER_ADMIN');
-        setLoading(false);
-      } catch (e) {}
-    }
-
     // Listen for redirect login result if user returns from Google
     getRedirectResult(auth).then((result) => {
       if (result && result.user) {
@@ -59,7 +47,6 @@ export function AuthProvider({ children }) {
 
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
-        localStorage.removeItem('ekotai_demo_user');
         setUser(currentUser);
 
         const isMasterEmail = currentUser.email && (
@@ -96,7 +83,7 @@ export function AuthProvider({ children }) {
           console.warn('Firestore user profile sync note:', err.message);
           setIsAdmin(isMasterEmail);
         }
-      } else if (!savedDemoUser) {
+      } else {
         setUser(null);
         setIsAdmin(false);
       }
@@ -170,26 +157,8 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Instant Demo Login for testing on Vercel without waiting for Firebase Console domain approval
-  const signInAsDemoUser = (role = 'CITIZEN') => {
-    const isSuperAdmin = role === 'SUPER_ADMIN';
-    const mock = {
-      uid: isSuperAdmin ? 'admin-super-01' : 'citizen-tester-01',
-      displayName: isSuperAdmin ? 'সুপার অ্যাডমিন (টেস্ট)' : 'নাগরিক পরীক্ষক',
-      email: isSuperAdmin ? 'admin@ekoitaibol.com' : 'citizen@ekoitaibol.com',
-      photoURL: null,
-      role: isSuperAdmin ? 'SUPER_ADMIN' : 'CITIZEN',
-      isDemoMode: true
-    };
-    localStorage.setItem('ekotai_demo_user', JSON.stringify(mock));
-    setUser(mock);
-    setIsAdmin(isSuperAdmin);
-    setAuthError(null);
-  };
-
   const signOut = async () => {
     try {
-      localStorage.removeItem('ekotai_demo_user');
       await firebaseSignOut(auth);
       setUser(null);
       setIsAdmin(false);
@@ -210,8 +179,7 @@ export function AuthProvider({ children }) {
       authError, 
       clearAuthError,
       signInWithGoogle, 
-      signInWithGoogleRedirect,
-      signInAsDemoUser, 
+      signInWithGoogleRedirect, 
       signOut 
     }}>
       {children}
