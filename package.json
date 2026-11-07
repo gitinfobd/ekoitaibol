@@ -1,0 +1,26 @@
+{
+  "name": "ekoitaibol",
+  "version": "1.0.0",
+  "private": true,
+  "description": "EKOTAI BOL (একতাই বল) - জনগণের আইডিয়া, সম্মিলিত অংশগ্রহণ ও স্বচ্ছ অর্থায়নের প্ল্যাটফর্ম",
+  "scripts": {
+    "dev": "next dev -p 3000",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "ocr:check": "node scripts/ocr-check.js",
+    "deploy": "node scripts/ocr-check.js && git add . && git commit -m \"chore: update ekotai bol platform\" && git push origin HEAD:main"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.16.0",
+    "next": "^15.2.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17"
+  }
+}

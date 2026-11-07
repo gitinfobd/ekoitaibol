@@ -1,0 +1,17 @@
+# EKOTAI BOL (একতাই বল)
+> একতাই শক্তি, উদ্যোগে পরিবর্তন।
+
+EKOTAI BOL (https://ekoitaibol.com) is Bangladesh's first nationwide public-benefit civic innovation, community voting, and transparent micro-crowdfunding platform covering all 64 districts.
+
+## Core Pillars
+- **Public Idea Submission**: Free submission for citizens. Raw proposals refined by AI Co-pilot into actionable project plans.
+- **64 District Boards**: Community voting and 5-star ratings with constructive positive/negative critiques.
+- **100 Taka Micro-Crowdfunding**: 100% transparent live ledger tracking voluntary backing with masked phone numbers (e.g. 0171****890).
+- **Sustainable Local Employment & Welfare**: Ground-level implementation with statutory labor rights and Universal Pension Scheme (সর্বজনীন পেনশন) coverage.
+
+## Core Navigation
+- Notice Board: /notice-board
+- Submit Idea: /submit-idea
+- Projects & Live Ledger: /projects
+- Welfare & Pension Architecture: /welfare
+- About & Governance: /about
